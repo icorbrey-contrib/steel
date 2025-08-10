@@ -17,7 +17,7 @@ pub fn process_module() -> BuiltInModule {
         .register_fn("spawn-process", CommandBuilder::spawn_process)
         .register_fn("wait", ChildProcess::wait)
         .register_fn("wait->stdout", ChildProcess::wait_with_stdout)
-        .register_fn("which", binary_exists_on_path)
+        .register_native_fn_definition(BINARY_EXISTS_ON_PATH_DEFINITION)
         .register_fn("child-stdout", ChildProcess::stdout)
         .register_fn("child-stderr", ChildProcess::stderr)
         .register_fn("child-stdin", ChildProcess::stdin)
@@ -37,15 +37,32 @@ struct ChildProcess {
     child: Option<Child>,
 }
 
-fn binary_exists_on_path(binary: String) -> Option<String> {
+/// Returns the path to the given binary by name, if it exists on `$PATH`.
+///
+/// `(which binary) -> string?`
+///
+/// - `binary : (string?)`: The name of the binary to find the path for.
+///
+/// # Example
+///
+/// ```scheme
+/// > (which "rustc") ;; => "/usr/bin/rustc"
+/// > (which "fake") ;; => #f
+/// ```
+#[steel_derive::function(name = "which")]
+fn binary_exists_on_path(binary: SteelVal) -> SteelVal {
+    let SteelVal::StringV(binary) = binary else {
+        return SteelVal::BoolV(false);
+    };
+
     #[cfg(not(target_arch = "wasm32"))]
-    match which::which(binary) {
-        Ok(v) => Some(v.into_os_string().into_string().unwrap()),
-        Err(_) => None,
+    match which::which(binary.to_string()) {
+        Ok(v) => SteelVal::StringV(v.into_os_string().into_string().unwrap().into()),
+        Err(_) => SteelVal::BoolV(false),
     }
 
     #[cfg(target_arch = "wasm32")]
-    None
+    SteelVal::BoolV(false)
 }
 
 impl ChildProcess {
